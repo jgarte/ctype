@@ -71,6 +71,9 @@
     (do ((ct1 ct1 (ccons-cdr ct1)))
         ((ctype= client (cmember nil) ct1)
          (values t t))
+      (unless (typep ct1 'ccons)
+        ;; ct1 includes non-proper lists which are not part of ct2.
+        (return-from subctypep (values nil t)))
       (let ((type (ccons-car ct1)))
         (unless (subctypep client type element-type)
           (return-from subctypep (values nil t)))))))
