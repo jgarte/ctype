@@ -54,11 +54,24 @@
 
 (defmethod conjoin/2 (client (ct1 clist-of) (ct2 clist-of))
   (clist-of (conjoin client (element-ctype ct1) (element-ctype ct2))))
+
+(define-commutative-method conjoin/2 (client (ct1 clist-of) (ct2 cmember))
+  (when (bot-p ct2)
+    ct1))
+
+(define-commutative-method conjoin/2 (client (ct1 clist-of) (ct2 ccons))
+  (unless (disjointp client ct2 ct1)
+    ct1))
+
 (defmethod disjoin/2 (client (ct1 clist-of) (ct2 clist-of))
   (clist-of (disjoin client (element-ctype ct1) (element-ctype ct2))))
 
+(define-commutative-method disjoin/2 (client (ct1 clist-of) (ct2 cmember))
+  (when (bot-p ct2)
+    ct1))
+
 (defmethod subtract (client (ct1 clist-of) (ct2 clist-of))
-  (clist-of (conjoin client (element-ctype ct1) (negate client (element-ctype ct2)))))
+  (clist-of (conjoin client (element-ctype ct1) (negate (element-ctype ct2)))))
 
 ;;;
 
@@ -82,6 +95,10 @@
   (declare (ignore client))
   (values (equal (cmember-members ct1) '(nil)) t))
 
+(defmethod subctypep (client (ct1 clist-of) (ct2 disjunction))
+  (and/tri (subctypep client (ccons (ctype:top) (ctype:top)) ct2)
+           (subctypep client (cmember nil) ct2)))
+
 (define-commutative-method disjointp (client (clist-of clist-of) (ccons ccons))
   (or/tri (disjointp client (ccons-car ccons) (element-ctype clist-of))
           (disjointp client (ccons-cdr ccons) clist-of)))
@@ -97,21 +114,20 @@
   (values nil t))
 
 ;;; LIST is a subtype of SEQUENCE, so all CLIST-OF types are as well.
-(defmethod subctypep (client (ct1 clist-of) (ct2 csequence))
-  (declare (ignore client))
-  (values t t))
-(defmethod subctypep (client (ct1 csequence) (ct2 clist-of))
-  (declare (ignore client))
-  (values nil t))
-(define-commutative-method disjointp (client (ct1 clist-of) (ct2 csequence))
-  (declare (ignore client))
-  (values nil t))
-(define-commutative-method conjoin/2 (client (ct1 clist-of) (ct2 csequence))
-  (declare (ignore client))
-  ct1)
-(define-commutative-method disjoin/2 (client (ct1 clist-of) (ct2 csequence))
-  (declare (ignore client))
-  ct2)
-(defmethod subtract (client (ct1 clist-of) (ct2 csequence))
-  (declare (ignore client))
-  (bot))
+(defun sequence-cclass-p (cclass)
+  (when (member (class-name (cclass-class cclass))
+                '(sequence list))
+    t))
+(defmethod subctypep (client (ct1 clist-of) (ct2 cclass))
+  (values (sequence-cclass-p ct2) t))
+(defmethod subctypep (client (ct1 cclass) (ct2 clist-of)) (values nil t))
+(define-commutative-method disjointp (client (ct1 clist-of) (ct2 cclass))
+  (values (not (sequence-cclass-p ct2)) t))
+(define-commutative-method conjoin/2 (client (ct1 clist-of) (ct2 cclass))
+  (if (sequence-cclass-p ct2) ct1 (bot)))
+(define-commutative-method disjoin/2 (client (ct1 clist-of) (ct2 cclass))
+  (if (sequence-cclass-p ct2) ct2 nil))
+(defmethod subtract (client (ct1 clist-of) (ct2 cclass))
+  (if (sequence-cclass-p ct2) (bot) ct1))
+(defmethod subtract (client (ct1 cclass) (ct2 clist-of))
+  (if (sequence-cclass-p ct1) nil (bot)))
