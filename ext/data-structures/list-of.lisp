@@ -19,6 +19,11 @@
                   (top)
                   (specifier-ctype client element-type env)))))
 
+(deftype list-of (&optional element-type)
+  "A proper list whose elements are all of type ELEMENT-TYPE."
+  (declare (ignore element-type))
+  'list)
+
 (defmethod ctypep (client (object null) (ct clist-of))
   (declare (ignore client))
   t)

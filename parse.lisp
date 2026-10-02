@@ -326,6 +326,9 @@
 
 (defgeneric cons-specifier-ctype (client head rest env))
 
+(defmethod cons-specifier-ctype (client (head symbol) rest env)
+  nil)
+
 (macrolet ((def ((head) &body body)
              `(defmethod cons-specifier-ctype (client (head (eql ',head)) rest env)
                 (declare (ignorable head client rest env))
@@ -443,8 +446,16 @@
   (or (symbol-specifier-ctype client (class-name spec) env)
       (class-specifier-ctype client spec env)))
 
-(defun parse (client specifier env)
-  (parse-expanded client (typexpand client specifier env) env))
+(defun parse (client spec env)
+  (let ((ctype
+          (typecase spec
+            (symbol (symbol-specifier-ctype client spec env))
+            (cons (cons-specifier-ctype client (car spec) (cdr spec) env)))))
+    (or ctype
+        (multiple-value-bind (expanded expandedp) (typexpand-1 client spec env)
+          (if expandedp
+              (parse client expanded env)
+              (parse-expanded client expanded env))))))
 
 (defun specifier-ctype (client specifier &optional env)
   (let ((ct (parse client specifier env)))

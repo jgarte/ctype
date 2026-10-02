@@ -69,6 +69,6 @@ The additional generic functions `disjointp`, `negate`, `conjoin/2`, `disjoin/2`
 
 While ctype implements the Common Lisp type system, some users may be interested in defining extensions to said type system. One can do so by defining subclasses of CTYPE and defining methods on some or all of the above functions.
 
-The ext/ directory contains a few example extensions. See the README in that directory for more information.
+Custom ctypes can be represented as type specifiers (parsed) by defining a `cons-specifier-ctype` or `ctype:symbol-specifier-ctype` method on your own client and a dummy `deftype` for when your type specifier is being parsed by something other than ctype or another client.
 
-Custom ctypes can be represented as type specifiers using `define-extended-type` and accessed using `extended-specifier-ctype` . See the documentation strings for more information.
+The ext/ directory contains a few example extensions. See the README in that directory for more information.

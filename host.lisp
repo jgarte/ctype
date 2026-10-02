@@ -111,12 +111,196 @@
 ;;; figure many programmers want it to Just Work in the basic sense of
 ;;; mimicking the host type system, so we do some implementation specifics.
 
+#+abcl
+(progn
+  (defun abcl-type-expand-1 (type)
+    (cond ((symbolp type)
+           (case type
+             (BIT
+              (return-from abcl-type-expand-1 '(integer 0 1)))
+             (CONS
+              (return-from abcl-type-expand-1 '(cons t t)))
+             (FIXNUM
+              (return-from abcl-type-expand-1
+                '(integer #.most-negative-fixnum #.most-positive-fixnum)))
+             (SIGNED-BYTE
+              (return-from abcl-type-expand-1 'integer))
+             (UNSIGNED-BYTE
+              (return-from abcl-type-expand-1 '(integer 0 *)))
+             (BASE-CHAR
+              (return-from abcl-type-expand-1 'character))
+             (SHORT-FLOAT
+              (return-from abcl-type-expand-1 'single-float))
+             (LONG-FLOAT
+              (return-from abcl-type-expand-1 'double-float))
+             (COMPLEX
+              (return-from abcl-type-expand-1 '(complex *)))
+             (ARRAY
+              (return-from abcl-type-expand-1 '(array * *)))
+             (SIMPLE-ARRAY
+              (return-from abcl-type-expand-1 '(simple-array * *)))
+             (VECTOR
+              (return-from abcl-type-expand-1 '(array * (*))))
+             (SIMPLE-VECTOR
+              (return-from abcl-type-expand-1 '(simple-array t (*))))
+             (BIT-VECTOR
+              (return-from abcl-type-expand-1 '(bit-vector *)))
+             (SIMPLE-BIT-VECTOR
+              (return-from abcl-type-expand-1 '(simple-bit-vector *)))
+             (BASE-STRING
+              (return-from abcl-type-expand-1 '(array base-char (*))))
+             (SIMPLE-BASE-STRING
+              (return-from abcl-type-expand-1 '(simple-array base-char (*))))
+             (STRING
+              (return-from abcl-type-expand-1 '(string *)))
+             (SIMPLE-STRING
+              (return-from abcl-type-expand-1 '(simple-string *)))
+             ((nil)
+              (return-from abcl-type-expand-1 nil))
+             (t
+              (unless (get type 'deftype-definition)
+                (return-from abcl-type-expand-1 type)))))
+          ((classp type)
+           (return-from abcl-type-expand-1
+             (if (eq (class-name type) 'fixnum)
+                 '(integer #.most-negative-fixnum #.most-positive-fixnum)
+                 type)))
+          ((and (consp type)
+                (memq (car type) '(and or not eql member satisfies mod values)))
+           (cond ((or (equal type '(and fixnum unsigned-byte))
+                      (equal type '(and unsigned-byte fixnum)))
+                  (return-from abcl-type-expand-1 '(integer 0 #.most-positive-fixnum)))
+                 (t
+                  (return-from abcl-type-expand-1 type)))))
+    ;; Fall through...
+    (let (tp i)
+      (if (consp type)
+          (setf tp (car type) i (cdr type))
+          (setf tp type i nil))
+      (when (and (symbolp tp) (get tp 'deftype-definition))
+        (setf type (apply (get tp 'deftype-definition) i)))
+      (case tp
+        (INTEGER
+         (return-from abcl-type-expand-1 (if i (cons tp i) tp)))
+        (CONS
+         (let* ((len (length i))
+                (car-typespec (if (> len 0) (car i) t))
+                (cdr-typespec (if (> len 1) (cadr i) t)))
+           (unless (and car-typespec cdr-typespec)
+             (return-from abcl-type-expand-1 nil))
+           (when (eq car-typespec '*)
+             (setf car-typespec t))
+           (when (eq cdr-typespec '*)
+             (setf cdr-typespec t))
+           (return-from abcl-type-expand-1 (cons tp (list car-typespec cdr-typespec)))))
+        (SIGNED-BYTE
+         (if (or (null i) (eq (car i) '*))
+             (return-from abcl-type-expand-1 'integer)
+             (return-from abcl-type-expand-1
+               (list 'integer
+                     (- (expt 2 (1- (car i))))
+                     (1- (expt 2 (1- (car i))))))))
+        (UNSIGNED-BYTE
+         (if (or (null i) (eq (car i) '*))
+             (return-from abcl-type-expand-1 '(integer 0 *)))
+         (return-from abcl-type-expand-1 (list 'integer 0 (1- (expt 2 (car i))))))
+        ((ARRAY SIMPLE-ARRAY)
+         (unless i
+           (return-from abcl-type-expand-1 (list tp '* '*)))
+         (when (= (length i) 1)
+           (setf i (append i '(*))))
+         (setf (car i) (abcl-type-expand-1 (car i)))
+         (return-from abcl-type-expand-1 (cons tp i)))
+        (VECTOR
+         (case (length i)
+           (0
+            (return-from abcl-type-expand-1 '(array * (*))))
+           (1
+            (setf (car i) (abcl-type-expand-1 (car i)))
+            (return-from abcl-type-expand-1 (list 'array (car i) '(*))))
+           (2
+            (setf (car i) (abcl-type-expand-1 (car i)))
+            (return-from abcl-type-expand-1 (list 'array (car i) (list (cadr i)))))
+           (t
+            (error "Invalid type specifier ~S." type))))
+        (SIMPLE-VECTOR
+         (case (length i)
+           (0
+            (return-from abcl-type-expand-1 '(simple-array t (*))))
+           (1
+            (return-from abcl-type-expand-1 (list 'simple-array t (list (car i)))))
+           (t
+            (error "Invalid type specifier ~S." type))))
+        (BIT-VECTOR
+         (case (length i)
+           (0
+            (return-from abcl-type-expand-1 '(bit-vector *)))
+           (1
+            (return-from abcl-type-expand-1 (list 'bit-vector (car i))))
+           (t
+            (error "Invalid type specifier ~S." type))))
+        (SIMPLE-BIT-VECTOR
+         (case (length i)
+           (0
+            (return-from abcl-type-expand-1 '(simple-bit-vector *)))
+           (1
+            (return-from abcl-type-expand-1 (list 'simple-bit-vector (car i))))
+           (t
+            (error "Invalid type specifier ~S." type))))
+        (BASE-STRING
+         (if i
+             (return-from abcl-type-expand-1 (list 'array 'base-char (list (car i))))
+             (return-from abcl-type-expand-1 '(array base-char (*)))))
+        (SIMPLE-BASE-STRING
+         (if i
+             (return-from abcl-type-expand-1 (list 'simple-array 'base-char (list (car i))))
+             (return-from abcl-type-expand-1 '(simple-array base-char (*)))))
+        (SHORT-FLOAT
+         (setf tp 'single-float))
+        (LONG-FLOAT
+         (setf tp 'double-float))
+        (COMPLEX
+         (cond ((null i)
+                (return-from abcl-type-expand-1 '(complex *)))
+               ((eq (car i) 'short-float)
+                (return-from abcl-type-expand-1 '(complex single-float)))
+               ((eq (car i) 'long-float)
+                (return-from abcl-type-expand-1 '(complex double-float))))))
+      (if i (cons tp i) tp))))
+
+#+ccl
+(progn
+  (defun ccl-type-expand-1 (form &optional env)
+    (let ((def (cond ((symbolp form)
+                      (gethash form ccl::%deftype-expanders%))
+                     ((and (consp form) (symbolp (car form)))
+                      (gethash (car form) ccl::%deftype-expanders%))
+                     (t nil))))
+      (if def
+          (values (funcall def (if (consp form) form (list form)) env)
+                  t)
+          (values form nil)))))
+
+#+cmucl
+(progn
+  (defun cmucl-type-expand-1 (form)
+    (let ((def (cond ((symbolp form)
+                      (c::info type expander form))
+                     ((and (consp form) (symbolp (car form)))
+                      (c::info type expander (car form)))
+                     (t nil))))
+      (if def
+          (values (funcall def (if (consp form) form (list form)))
+                  t)
+          (values form
+                  nil)))))
+
 #+ecl
-(progn  
+(progn
 ;;; This is like si::normalize-type, except we return a type specifier and
 ;;; whether it expanded, and don't signal an error if something is malformed.
 ;;; This obviously uses internals - fragile - but ECL doesn't export this.
-(defun typexpand-1 (spec env)
+(defun ecl-typexpand-1 (spec env)
   (declare (ignore env))
   (cond ((symbolp spec)
          (let ((expander (si:get-sysprop spec 'si::deftype-definition)))
@@ -131,13 +315,42 @@
                (values spec nil))))
         (t (values spec nil))))
 
-(defun %typexpand (type-specifier environment)
+(defun ecl-typexpand (type-specifier environment)
   (loop with ever-expanded = nil
         do (multiple-value-bind (expansion expandedp)
-               (typexpand-1 type-specifier environment)
+               (ecl-typexpand-1 type-specifier environment)
              (if expandedp
                  (setf ever-expanded t type-specifier expansion)
                  (return (values type-specifier ever-expanded)))))))
+
+#+sicl
+(progn
+  (defun sicl-typexpand-1 (type-specifier &optional environment)
+    (let* ((name (if (consp type-specifier)
+                     (first type-specifier)
+                     type-specifier))
+           (expander (sicl-type:type-expander name)))
+      (if (null expander)
+          (values type-specifier nil)
+          (let ((expansion (funcall expander
+                                    (if (consp type-specifier)
+                                        type-specifier
+                                        (list type-specifier))
+                                    environment)))
+            (values expansion t))))))
+
+(defmethod typexpand-1 (client tspec env)
+  (declare (ignore client) (ignorable env))
+  #+abcl (abcl-type-expand-1 tspec)
+  #+ccl (ccl-type-expand-1 tspec env)
+  #+clasp (clasp-cleavir::type-expand-1 tspec env)
+  #+cmucl (cmucl-type-expand-1 tspec)
+  #+ecl (ecl-typexpand-1 tspec env)
+  #+sbcl (sb-ext:typexpand-1 tspec env)
+  #+sicl (sicl-typexpand-1 tspec env)
+  ;; in the worst case, just pretend deftype isn't real.
+  ;; That will at least let you parse basic types without complaints.
+  #-(or abcl ccl clasp ccl ecl sbcl sicl) tspec)
 
 (defmethod typexpand (client tspec env)
   (declare (ignore client) (ignorable env))
@@ -145,7 +358,7 @@
   #+ccl (ccl::type-expand tspec env)
   #+clasp (cleavir-env:type-expand env tspec)
   #+cmucl (kernel:type-expand tspec)
-  #+ecl (%typexpand tspec env)
+  #+ecl (ecl-typexpand tspec env)
   #+sbcl (sb-ext:typexpand tspec env)
   #+sicl (sicl-type:typexpand tspec env)
   ;; in the worst case, just pretend deftype isn't real.

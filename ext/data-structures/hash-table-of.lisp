@@ -25,6 +25,12 @@
                         (top)
                         (specifier-ctype client value-type env)))))
 
+(deftype hash-table-of (key-type value-type)
+  "A hash-table whose keys are of type KEY-TYPE and values are of type
+   VALUE-TYPE."
+  (declare (ignore key-type value-type))
+  'hash-table)
+
 (defmethod ctypep (client (object t) (ctype chash-table-of))
   (declare (ignore client))
   nil)

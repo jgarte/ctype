@@ -27,8 +27,15 @@
                                  rest env)
   (destructuring-bind (&rest property-ctypes &key &allow-other-keys) rest
     (cproperty-list
-     (loop for (key type) on property-ctypes
+     (loop for (key type) on property-ctypes by #'cddr
            collect (cons key (specifier-ctype client type env))))))
+
+(deftype plist (&rest property-ctypes)
+  "A property list where the keys are the keys of PROPERTY-CTYPES and
+   the values are the required types of the property associated with
+   the key."
+  (declare (ignore property-ctypes))
+  'list)
 
 (defmethod ctypep (client (list list) (ct cproperty-list))
   (and (let ((len (list-length list))) (and len (evenp len)))

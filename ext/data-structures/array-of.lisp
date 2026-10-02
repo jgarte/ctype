@@ -27,6 +27,11 @@
     (carray-of client (specifier-ctype client element-type env) dims
                upgraded-element-type)))
 
+(deftype array-of (element-type &optional dims upgraded-element-type)
+  "An array whose elements are of type ELEMENT-TYPE."
+  (declare (ignore upgraded-element-type))
+  `(array ,element-type ,dims))
+
 (defun simple-carray-of (client element-ctype
                          &optional (dims '*) (upgraded-element-type '*))
   (declare (ignore client))
@@ -43,20 +48,21 @@
                       (specifier-ctype client element-type env)
                       dims upgraded-element-type)))
 
-(defun cvector-of (element-ctype &optional (length '*) (upgraded-element-type '*) simplicity)
+(defun cvector-of (client element-ctype &optional (length '*) (upgraded-element-type '*) simplicity)
   (carray-of
-   element-ctype length upgraded-element-type simplicity))
+   client element-ctype (list length) upgraded-element-type simplicity))
 
 (defmethod cons-specifier-ctype ((client client) (head (eql 'vector-of))
                                  rest env)
   (destructuring-bind (element-type
                        &optional (length '*) (upgraded-element-type '*))
       rest
-    (cvector-of (specifier-ctype client element-type env)
+    (cvector-of client (specifier-ctype client element-type env)
                 length upgraded-element-type)))
 
-(defun simple-cvector-of (element-ctype &optional (length '*) (upgraded-element-type '*))
+(defun simple-cvector-of (client element-ctype &optional (length '*) (upgraded-element-type '*))
   (simple-carray-of
+   client
    element-ctype (list length) upgraded-element-type))
 
 (defmethod cons-specifier-ctype ((client client) (head (eql 'simple-vector-of))
@@ -64,11 +70,11 @@
   (destructuring-bind (element-type
                        &optional (length '*) (upgraded-element-type '*))
       rest
-    (simple-cvector-of (specifier-ctype client element-type env)
+    (simple-cvector-of client (specifier-ctype client element-type env)
                        length upgraded-element-type)))
 
 (defun unparse-vector-simple (type length)
-  (let* ((front `(simple-vector-of ,type))
+  (let* ((front `(simple-vector-of ,(unparse type)))
          (back (if (eq length '*)
                    nil
                    (list length)))
@@ -78,13 +84,13 @@
         all)))
 
 (defmethod unparse ((ct carray-of))
-  (let* ((element-type (unparse (carray-eaet ct)))
+  (let* ((element-type (carray-eaet ct))
          (dims (carray-dims ct))
          (tail (if (eq dims '*)
                    (if (eq element-type '*)
                        nil
-                       `(,element-type))
-                   `(,element-type ,dims))))
+                       `(,(unparse element-type)))
+                   `(,(unparse element-type) ,dims))))
     (if (eq (carray-simplicity ct) :simple)
         (cond ((null tail) 'simple-array)
               ((and (not (eq dims '*))
@@ -114,7 +120,7 @@
 
 ;; can't use define-commutative-method because of the :around
 (defun to-array-of (result)
-  (make-instance 'carray
+  (make-instance 'carray-of
     :dims (carray-dims result) :simplicity (carray-simplicity result)
     :eaet (carray-eaet result) :uaet (carray-uaet result)))
 

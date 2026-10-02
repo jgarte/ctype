@@ -63,3 +63,18 @@
     (sub t t (unsigned-byte 4) (signed-byte 16) (signed-byte 7) (signed-byte 16))
     (sub nil t
          (unsigned-byte 8) (signed-byte 16) (signed-byte 7) (signed-byte 16))))
+
+(5am:test list-of
+  (let ((client (make-instance 'ctype.ext.data-structures:client)))
+    (5am:is (ctype:ctype= client
+                          (ctype.ext.data-structures:clist-of (ctype:range 'integer nil nil nil nil))
+                          (ctype:specifier-ctype client '(ctype.ext.data-structures:list-of integer))))))
+
+(deftype list-of-wrapper (element)
+  `(ctype.ext.data-structures:list-of ,element))
+
+(5am:test list-of-wrapper
+  (let ((client (make-instance 'ctype.ext.data-structures:client)))
+    (5am:is (ctype:ctype= client
+                          (ctype:specifier-ctype client '(list-of-wrapper integer))
+                          (ctype:specifier-ctype client '(ctype.ext.data-structures:list-of integer))))))
